@@ -1,0 +1,19 @@
+env/
+__pycache__/
+*.pyc
+models/*.pt
+models/*.ckpt
+test_audio/*.wav
+.env
+
+# AASIST repo — checkpoints are large, don't commit
+detection/aasist_repo/models/weights/*.pth
+detection/aasist_repo/**/*.pth
+
+# SpeechBrain downloaded weights
+detection/pretrained_models/
+api/pretrained_models/
+**/pretrained_models/
+
+# HF cache if any got created locally
+.cache/.DS_Store

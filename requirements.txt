@@ -1,0 +1,11 @@
+torch
+torchaudio
+librosa
+numpy
+fastapi
+uvicorn
+python-multipart
+soundfile
+webrtcvad
+speechbrain
+scipy
