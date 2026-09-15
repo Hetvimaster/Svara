@@ -18,6 +18,15 @@ class SpeakerVerifier:
         self.enrolled_embedding = embedding.squeeze()
         return self.enrolled_embedding
 
+    def enroll_multi(self, audio_tensors):
+        """Average embeddings across several real clips of the same person —
+        more stable than a single clip, since any one recording's specific
+        conditions (noise, mic distance, phrasing) get averaged out rather
+        than becoming the entire reference voiceprint."""
+        embeddings = [self.model.encode_batch(a.unsqueeze(0)).squeeze() for a in audio_tensors]
+        self.enrolled_embedding = torch.stack(embeddings).mean(dim=0)
+        return self.enrolled_embedding
+
     def verify(self, audio_tensor):
         """Compare incoming audio against the enrolled voiceprint.
         Returns cosine similarity: closer to 1 = same speaker, closer to 0 = mismatch."""
@@ -31,15 +40,25 @@ class SpeakerVerifier:
         ).item()
         return similarity
 
-if __name__ == "__main__":
+def load(path):
     import soundfile as sf
+    audio, sr = sf.read(path)
+    return torch.tensor(audio, dtype=torch.float32)
 
+if __name__ == "__main__":
     verifier = SpeakerVerifier()
 
-    audio, sr = sf.read("../test_audio/sample.wav")
-    waveform = torch.tensor(audio, dtype=torch.float32)
+    hetvi = load("../test_audio/hetvi.wav")
+    binita = load("../test_audio/binita.wav")
+    hetvi_spoof = load("../test_audio/hetviSpoof.wav")
+    binita_spoof = load("../test_audio/binitaSpoof.wav")
 
-    # enroll and verify against the SAME clip — sanity check, should be ~1.0
-    verifier.enroll(waveform)
-    similarity = verifier.verify(waveform)
-    print(f"Self-similarity (sanity check): {similarity:.4f}")
+    # enrolled identity: Hetvi's real voice
+    verifier.enroll(hetvi)
+    print(f"Hetvi real  vs Hetvi's clone    : {verifier.verify(hetvi_spoof):.4f}  (does the clone fool it?)")
+    print(f"Hetvi real  vs Binita real      : {verifier.verify(binita):.4f}  (different speaker, expect low)")
+
+    # switch enrolled identity: Binita's real voice
+    verifier.enroll(binita)
+    print(f"Binita real vs Binita's clone   : {verifier.verify(binita_spoof):.4f}  (does the clone fool it?)")
+    print(f"Binita real vs Hetvi real       : {verifier.verify(hetvi):.4f}  (different speaker, expect low)")
