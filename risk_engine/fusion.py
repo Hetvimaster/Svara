@@ -19,7 +19,7 @@ def compute_risk_score(spoof_score, speaker_similarity, replay_result):
         replay_risk = 100 * confidence
 
     # weighted sum — day-one version, tune weights once you have labeled test data
-    risk = (0.5 * spoof_risk) + (0.3 * identity_risk) + (0.2 * replay_risk)
+    risk = (0.4 * spoof_risk) + (0.4 * identity_risk) + (0.2 * replay_risk)
     return min(100, max(0, risk))
 
 def get_tier(risk_score):
