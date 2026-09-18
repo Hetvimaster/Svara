@@ -28,7 +28,7 @@ def load_audio(path):
 def run(enrolled_paths, test_files):
     detector = SpoofDetector(
         config_path="aasist_repo/config/AASIST-L.conf",
-        checkpoint_path="aasist_repo/models/weights/AASIST-L_finetuned_indic.pth",
+        checkpoint_path="aasist_repo/models/weights/AASIST-L_finetuned_v2.pth",
     )
     verifier = SpeakerVerifier()
 
@@ -58,7 +58,7 @@ def run(enrolled_paths, test_files):
 
 
 if __name__ == "__main__":
-    test_files = ["hetvi.wav", "binita.wav", "hetviSpoof2.wav",
-                  "binitaSpoof.wav", "spoof1.wav", "spoof2.wav"]
-    run(enrolled_paths=["../test_audio/hetvi.wav", "../test_audio/hetvi2.wav"],
+    test_files = ["hetvi2.wav", "binita.wav", "hetviSpoof.wav",
+                  "hetviSpoof2.wav", "spoof1.wav", "spoof2.wav"]
+    run(enrolled_paths=["../test_audio/hetvi2.wav", "../test_audio/hetvi.wav"],
         test_files=test_files)

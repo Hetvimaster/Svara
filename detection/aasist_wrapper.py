@@ -36,7 +36,7 @@ class SpoofDetector:
         with torch.no_grad():
             x = audio_tensor.unsqueeze(0).to(self.device)  # add batch dim
             _, output = self.model(x)
-            score = torch.softmax(output, dim=1)[0, 0].item()  # prob of "spoof" class
+            score = torch.softmax(output, dim=1)[0, 1].item()  # prob of "spoof" class
         return score
 
     def predict_windowed(self, audio_tensor, hop_ratio=0.5, aggregate="mean"):
@@ -61,7 +61,7 @@ class SpoofDetector:
                 chunk = audio_tensor[start:start + NB_SAMP]
                 x = chunk.unsqueeze(0).to(self.device)
                 _, output = self.model(x)
-                s = torch.softmax(output, dim=1)[0, 0].item()
+                s = torch.softmax(output, dim=1)[0, 1].item()
                 scores.append(s)
 
         if aggregate == "max":
@@ -73,7 +73,7 @@ class SpoofDetector:
 if __name__ == "__main__":
     detector = SpoofDetector(
         config_path="aasist_repo/config/AASIST-L.conf",
-        checkpoint_path="aasist_repo/models/weights/AASIST-L_finetuned_indic.pth",
+        checkpoint_path="aasist_repo/models/weights/AASIST-L_finetuned_v2.pth",
     )
     import soundfile as sf
     import librosa

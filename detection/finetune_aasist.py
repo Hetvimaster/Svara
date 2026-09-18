@@ -134,6 +134,8 @@ def main():
     ap.add_argument("--init_checkpoint", default="aasist_repo/models/weights/AASIST-L.pth")
     ap.add_argument("--out_checkpoint", default="aasist_repo/models/weights/AASIST-L_finetuned_indic.pth")
     ap.add_argument("--epochs", type=int, default=15)
+    ap.add_argument("--patience", type=int, default=3,
+                    help="stop early if val EER doesn't improve for this many epochs")
     ap.add_argument("--batch_size", type=int, default=16)
     ap.add_argument("--lr", type=float, default=1e-5)  # small — fine-tuning, not training from scratch
     ap.add_argument("--freeze_backbone", action="store_true")
@@ -154,17 +156,27 @@ def main():
 
     train_ds = SpoofCSVDataset(args.train_csv, train=True)
     val_ds = SpoofCSVDataset(args.val_csv, train=False)
-    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=2)
-    val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=2)
-
+    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=0)
+    val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=0)
     weight = class_weights_from_dataset(train_ds, device)
     criterion = nn.CrossEntropyLoss(weight=weight)
     trainable_params = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.Adam(trainable_params, lr=args.lr, weight_decay=1e-4)
+    def set_frozen_bn_eval(model):
+        """model.train() re-enables BatchNorm running-stat updates on every
+        submodule regardless of requires_grad. If a module's parameters are
+        all frozen, force it back to eval() so its stats stop drifting."""
+        for module in model.modules():
+            params = list(module.parameters(recurse=False))
+            if params and all(not p.requires_grad for p in params):
+                module.eval()
 
     best_eer = 1.0
+    epochs_no_improve = 0
     for epoch in range(args.epochs):
         model.train()
+        if args.freeze_backbone:
+            set_frozen_bn_eval(model)
         running_loss, n = 0.0, 0
         for batch_idx, (x, y) in enumerate(train_loader):
             x, y = x.to(device), y.to(device)
@@ -185,16 +197,24 @@ def main():
             for x, y in val_loader:
                 x = x.to(device)
                 _, logits = model(x)
-                score = logits[:, 1].cpu().numpy()  # bonafide-leaning score, same convention as main.py
+                score = logits[:, 0].cpu().numpy()  
                 all_scores.extend(score.tolist())
                 all_labels.extend(y.numpy().tolist())
         eer = compute_eer(np.array(all_scores), np.array(all_labels))
         print(f"[epoch {epoch}] train_loss={train_loss:.4f} val_EER={eer*100:.2f}%")
-
         if eer < best_eer:
             best_eer = eer
+            epochs_no_improve = 0
             torch.save(model.state_dict(), args.out_checkpoint)
             print(f"  -> saved new best checkpoint (EER={eer*100:.2f}%) to {args.out_checkpoint}")
+        else:
+            epochs_no_improve += 1
+            if epochs_no_improve >= args.patience:
+                print(f"[early stop] no improvement for {args.patience} epochs, stopping")
+                break
+
+        if device == "mps":
+            torch.mps.empty_cache()
 
     print(f"[done] best val EER: {best_eer*100:.2f}%")
 
