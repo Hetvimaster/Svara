@@ -57,8 +57,60 @@ def pad_fixed(x: np.ndarray, max_len: int = NB_SAMP) -> np.ndarray:
     return np.tile(x, num_repeats)[:max_len]
 
 
+def trim_silence(audio: np.ndarray, sr: int, top_db: float = 30) -> np.ndarray:
+    """Trim leading/trailing near-silence. Without this, real recordings
+    (which often have room tone / mic handling noise at the edges) and
+    clean TTS clips (which usually don't) differ systematically in a way
+    that has nothing to do with spoof artifacts — the model can learn
+    that shortcut instead of the real one."""
+    if len(audio) == 0:
+        return audio
+    frame = max(int(sr * 0.02), 1)
+    n_frames = max(len(audio) // frame, 1)
+    energy = np.array([
+        np.sqrt(np.mean(audio[i * frame:(i + 1) * frame] ** 2) + 1e-12)
+        for i in range(n_frames)
+    ])
+    ref = energy.max() if energy.max() > 0 else 1.0
+    db = 20 * np.log10(energy / ref + 1e-12)
+    voiced = np.where(db > -top_db)[0]
+    if len(voiced) == 0:
+        return audio
+    start = voiced[0] * frame
+    end = min((voiced[-1] + 1) * frame, len(audio))
+    trimmed = audio[start:end]
+    return trimmed if len(trimmed) > 0 else audio
+
+
+def apply_call_channel(audio: np.ndarray, sr: int, rng: random.Random) -> np.ndarray:
+    """Randomly simulate voice-call-style degradation during training:
+    telephone bandpass (300-3400 Hz), an 8kHz codec-like round trip, and a
+    brief dropout. Applied probabilistically so the model sees BOTH clean
+    and call-degraded audio for both classes, rather than the two
+    conditions being confounded with the two labels."""
+    import librosa
+    from scipy.signal import butter, sosfilt
+
+    out = audio.copy()
+
+    if rng.random() < 0.5:
+        sos = butter(4, [300, 3400], btype="bandpass", fs=sr, output="sos")
+        out = sosfilt(sos, out).astype(np.float32)
+
+    if rng.random() < 0.5:
+        narrow = librosa.resample(out.astype(np.float32), orig_sr=sr, target_sr=8000)
+        out = librosa.resample(narrow, orig_sr=8000, target_sr=sr).astype(np.float32)
+
+    if rng.random() < 0.3 and len(out) > sr // 2:
+        drop_len = rng.randint(int(sr * 0.05), int(sr * 0.15))
+        drop_start = rng.randint(0, len(out) - drop_len)
+        out[drop_start:drop_start + drop_len] = 0.0
+
+    return out
+
+
 class SpoofCSVDataset(Dataset):
-    def __init__(self, csv_path, train=True):
+    def __init__(self, csv_path, train=True, augment_channel=False, augment_seed=0):
         self.items = []
         with open(csv_path, newline="") as f:
             for row in csv.reader(f):
@@ -68,6 +120,8 @@ class SpoofCSVDataset(Dataset):
                 y = 1 if label.strip().lower() == "bonafide" else 0
                 self.items.append((filepath.strip(), y))
         self.train = train
+        self.augment_channel = augment_channel
+        self._rng = random.Random(augment_seed)
 
     def __len__(self):
         return len(self.items)
@@ -81,6 +135,9 @@ class SpoofCSVDataset(Dataset):
             import librosa
             audio = librosa.resample(audio.astype(np.float32), orig_sr=sr, target_sr=SAMPLE_RATE)
         audio = audio.astype(np.float32)
+        audio = trim_silence(audio, SAMPLE_RATE)  # both train and val — keep it consistent
+        if self.train and self.augment_channel:
+            audio = apply_call_channel(audio, SAMPLE_RATE, self._rng)
         audio = pad_random(audio) if self.train else pad_fixed(audio)
         return torch.tensor(audio, dtype=torch.float32), y
 
@@ -139,6 +196,7 @@ def main():
     ap.add_argument("--batch_size", type=int, default=16)
     ap.add_argument("--lr", type=float, default=1e-5)  # small — fine-tuning, not training from scratch
     ap.add_argument("--freeze_backbone", action="store_true")
+    ap.add_argument("--augment_channel", action="store_true",help="randomly apply telephone bandpass / 8kHz round-trip / dropout to TRAIN audio only")
     args = ap.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")    
@@ -153,9 +211,9 @@ def main():
 
     if args.freeze_backbone:
         freeze_backbone_except_head(model)
-
-    train_ds = SpoofCSVDataset(args.train_csv, train=True)
-    val_ds = SpoofCSVDataset(args.val_csv, train=False)
+        
+    train_ds = SpoofCSVDataset(args.train_csv, train=True, augment_channel=args.augment_channel)
+    val_ds = SpoofCSVDataset(args.val_csv, train=False)  # val stays clean — augmentation is a train-time trick only
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=0)
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=0)
     weight = class_weights_from_dataset(train_ds, device)
