@@ -255,7 +255,7 @@ def main():
             for x, y in val_loader:
                 x = x.to(device)
                 _, logits = model(x)
-                score = logits[:, 0].cpu().numpy()  
+                score = logits[:, 1].cpu().numpy()  
                 all_scores.extend(score.tolist())
                 all_labels.extend(y.numpy().tolist())
         eer = compute_eer(np.array(all_scores), np.array(all_labels))
