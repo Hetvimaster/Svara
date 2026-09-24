@@ -59,7 +59,7 @@ def run(enrolled_paths, test_files):
 
 
 if __name__ == "__main__":
-    test_files = ["hetvi2.wav", "binita.wav", "hetviSpoof2.wav",
-                  "hetviSpoof.wav", "binitaSpoof.wav", "spoof1.wav", "spoof2.wav"]
-    run(enrolled_paths=["../test_audio/hetvi.wav", "../test_audio/hetvi2.wav"],
+    test_files = ["hetvi3.wav", "hetvi3Spoof.wav",
+                  "hetviSpoof2.wav", "spoof1.wav", "spoof2.wav"]
+    run(enrolled_paths=["../test_audio/hetvi2.wav", "../test_audio/hetvi3.wav"],
         test_files=test_files)
