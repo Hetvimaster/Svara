@@ -1,4 +1,3 @@
-# save as detection/diagnose_windows.py
 import torch, numpy as np, soundfile as sf
 from aasist_wrapper import SpoofDetector, NB_SAMP
 

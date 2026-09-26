@@ -6,13 +6,8 @@ import torch
 import soundfile as sf
 import numpy as np
 
-# from aasist_wrapper import SpoofDetector
-# from speaker_verification import SpeakerVerifier
-# from replay_detector import classify_replay
-# from risk_engine.fusion import compute_risk_score, get_tier
 from aasist_wrapper import SpoofDetector
 from speaker_verification import SpeakerVerifier
-from replay_detector import classify_replay
 from risk_engine.fusion import compute_risk_score, get_tier
 from dual_window_ewma import DualWindowEWMA
 TARGET_SR = 16000
@@ -57,27 +52,22 @@ def run(enrolled_paths, test_files):
     verifier.enroll_multi(enrolled_tensors)
     print(f"Enrolled identity from: {enrolled_paths}\n")
 
-    header = f"{'file':20s} {'spoof':>8s} {'speaker_sim':>12s} {'replay':>10s} {'risk':>8s} {'tier':>8s}"
+    header = f"{'file':20s} {'spoof':>8s} {'speaker_sim':>12s} {'risk':>8s} {'tier':>8s}"
     print(header)
     print("-" * len(header))
     for fname in test_files:
         audio, sr = load_audio(f"../test_audio/{fname}")
         waveform = torch.tensor(audio)
 
-        # spoof_score = detector.predict_windowed(waveform, aggregate="max")[0]
-        # ewma_result = ewma_scorer.score(audio, sr=TARGET_SR)
-        # spoof_score = ewma_result["final_score"]
         _, window_scores = detector.predict_windowed(waveform, aggregate="max")
         ewma_result = ewma_scorer.score_from_windows(window_scores)
         spoof_score = ewma_result["final_score"]
         speaker_sim = verifier.verify(waveform)
-        replay_result = classify_replay(audio, sr)
 
-        risk = compute_risk_score(spoof_score, speaker_sim, replay_result)
+        risk = compute_risk_score(spoof_score, speaker_sim)
         tier = get_tier(risk)
 
-        print(f"{fname:20s} {spoof_score:8.3f} {speaker_sim:12.3f} "
-              f"{replay_result['classification']:>10s} {risk:8.2f} {tier:>8s}")
+        print(f"{fname:20s} {spoof_score:8.3f} {speaker_sim:12.3f} {risk:8.2f} {tier:>8s}")
 
 
 if __name__ == "__main__":

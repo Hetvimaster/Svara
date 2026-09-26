@@ -8,8 +8,8 @@ import torch
 import numpy as np
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "aasist_repo"))
-from models.AASIST import Model as AASISTModel  # noqa: E402
-from finetune_aasist import SpoofCSVDataset, compute_eer  # reuse existing code
+from models.AASIST import Model as AASISTModel  
+from finetune_aasist import SpoofCSVDataset, compute_eer  
 from torch.utils.data import DataLoader
 
 

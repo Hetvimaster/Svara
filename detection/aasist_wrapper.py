@@ -3,7 +3,6 @@ import os
 import json
 import torch
 
-# make the cloned repo importable
 sys.path.append(os.path.join(os.path.dirname(__file__), "aasist_repo"))
 
 from models.AASIST import Model as AASISTModel

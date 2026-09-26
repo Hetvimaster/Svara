@@ -11,7 +11,7 @@ import io
 
 from detection.aasist_wrapper import SpoofDetector
 from detection.speaker_verification import SpeakerVerifier
-from detection.replay_detector import classify_replay
+from detection.dual_window_ewma import DualWindowEWMA
 from risk_engine.fusion import compute_risk_score, get_tier
 from risk_engine.audit_log import AuditLog
 
@@ -25,6 +25,7 @@ spoof_detector = SpoofDetector(
     checkpoint_path="detection/aasist_repo/models/weights/AASIST-L_finetuned_indic.pth",
 )
 speaker_verifier = SpeakerVerifier()
+ewma_scorer = DualWindowEWMA(alpha_fast=0.6, alpha_slow=0.2, combine="max")
 
 import librosa
 
@@ -53,23 +54,27 @@ async def enroll(files: list[UploadFile] = File(...)):
     speaker_verifier.enroll_multi(tensors)
     return {"status": "enrolled", "num_clips": len(tensors)}
 
+from fastapi import HTTPException
+
 @app.post("/verify_call")
 async def verify_call(file: UploadFile = File(...)):
-    """Score an incoming call audio clip against all three signals."""
+    """Score an incoming call audio clip against both signals."""
+    if speaker_verifier.enrolled_embedding is None:
+        raise HTTPException(status_code=400, detail="No identity enrolled yet — call /enroll first.")
     contents = await file.read()
     waveform, sr = load_audio_from_upload(contents)
 
-    spoof_score, _ = spoof_detector.predict_windowed(waveform, aggregate="max")
+    _, window_scores = spoof_detector.predict_windowed(waveform, aggregate="max")
+    ewma_result = ewma_scorer.score_from_windows(window_scores)
+    spoof_score = ewma_result["final_score"]
     speaker_similarity = speaker_verifier.verify(waveform)
-    replay_result = classify_replay(waveform.numpy(), sr)
 
-    risk_score = compute_risk_score(spoof_score, speaker_similarity, replay_result)
+    risk_score = compute_risk_score(spoof_score, speaker_similarity)
     tier = get_tier(risk_score)
 
     verdict = {
         "spoof_score": round(spoof_score, 4),
         "speaker_similarity": round(speaker_similarity, 4),
-        "replay_classification": replay_result["classification"],
         "risk_score": round(risk_score, 2),
         "tier": tier,
     }

@@ -29,9 +29,9 @@ from torch.utils.data import Dataset, DataLoader
 import soundfile as sf
 import numpy as np
 
-# make the cloned repo importable — run this script from detection/
+
 sys.path.append(os.path.join(os.path.dirname(__file__), "aasist_repo"))
-from models.AASIST import Model as AASISTModel  # noqa: E402
+from models.AASIST import Model as AASISTModel  
 
 SAMPLE_RATE = 16000
 NB_SAMP = 64600  # ~4s at 16kHz, fixed by AASIST-L architecture
